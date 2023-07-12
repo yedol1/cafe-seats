@@ -4,65 +4,76 @@ import { createSlice, configureStore } from "@reduxjs/toolkit";
 
 const drawingBoardSlice = createSlice({
   name: "drawingBoard",
-  initialState: { color: "#000000" },
+  initialState: { dots: [], lines: [], currentColor: "#000000" },
   reducers: {
     setColor: (state, action) => {
-      state.color = action.payload;
+      state.currentColor = action.payload;
+    },
+    addDot: (state, action) => {
+      state.dots.push({ x: action.payload.x, y: action.payload.y, color: state.currentColor });
+    },
+    addLine: (state, action) => {
+      state.lines.push({ start: action.payload.start, end: action.payload.end, color: state.currentColor });
     },
   },
 });
 
-const { setColor } = drawingBoardSlice.actions;
+const { setColor, addDot, addLine } = drawingBoardSlice.actions;
 
 const store = configureStore({ reducer: drawingBoardSlice.reducer });
 
 function DrawingBoard() {
-  const color = useSelector((state) => state.color);
+  const { dots, lines, currentColor } = useSelector((state) => state);
   const dispatch = useDispatch();
   const canvasRef = useRef(null);
-  let painting = false;
+  const painting = useRef(false);
+  const lastPosition = useRef({ x: 0, y: 0 });
+
+  const drawDot = (dot) => {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.fillStyle = dot.color;
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  const drawLine = (line) => {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.strokeStyle = line.color;
+    ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(line.start.x, line.start.y);
+    ctx.lineTo(line.end.x, line.end.y);
+    ctx.stroke();
+  };
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    dots.forEach((dot) => drawDot(dot));
+    lines.forEach((line) => drawLine(line));
+  }, [dots, lines]);
 
-    const startPosition = (e) => {
-      painting = true;
-      draw(e);
-    };
+  const handleMouseDown = (e) => {
+    painting.current = true;
+    lastPosition.current = { x: e.clientX, y: e.clientY };
+    dispatch(addDot({ x: e.clientX, y: e.clientY, color: currentColor }));
+  };
 
-    const finishedPosition = () => {
-      painting = false;
-      ctx.beginPath();
-    };
+  const handleMouseUp = () => {
+    painting.current = false;
+  };
 
-    const draw = (e) => {
-      if (!painting) return;
-      ctx.lineWidth = 10;
-      ctx.lineCap = "round";
-      ctx.strokeStyle = color;
-
-      ctx.lineTo(e.clientX, e.clientY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(e.clientX, e.clientY);
-    };
-
-    canvas.addEventListener("mousedown", startPosition);
-    canvas.addEventListener("mouseup", finishedPosition);
-    canvas.addEventListener("mousemove", draw);
-
-    return () => {
-      canvas.removeEventListener("mousedown", startPosition);
-      canvas.removeEventListener("mouseup", finishedPosition);
-      canvas.removeEventListener("mousemove", draw);
-    };
-  }, [color]);
+  const handleMouseMove = (e) => {
+    if (!painting.current) return;
+    const newPosition = { x: e.clientX, y: e.clientY };
+    dispatch(addLine({ start: lastPosition.current, end: newPosition, color: currentColor }));
+    lastPosition.current = newPosition;
+  };
 
   return (
     <div>
-      <canvas ref={canvasRef} width="500" height="500" style={{ border: "1px solid #000000" }} />
-      <input type="color" value={color} onChange={(e) => dispatch(setColor(e.target.value))} />
+      <canvas ref={canvasRef} width="500" height="500" style={{ border: "1px solid #000000" }} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} onMouseMove={handleMouseMove} />
+      <input type="color" value={currentColor} onChange={(e) => dispatch(setColor(e.target.value))} />
     </div>
   );
 }
